@@ -1,10 +1,7 @@
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from fire import Fire
-from sklearn.metrics import precision_recall_fscore_support
-from tqdm import tqdm
 K_VALS = [5, 10, 30, 100]
 SCORED_PARTS = ('dev', 'dev_small', 'test')
 
