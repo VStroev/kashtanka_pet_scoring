@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 from fire import Fire
 
-PROB_THESHOLD = [3, 5, 10]
+PROB_THESHOLD = [1,3, 10]
 
 
 def process_case(query, answers):
@@ -28,7 +28,7 @@ def process_cases(queries_path, answers_path):
 def random_score(data_path):
     data_path = Path(data_path)
 
-    header = ['query', 'answer', 'score', 'k', 'exists_prob']
+    header = ['query', 'answer', 'score', 'k', 'hit_prob']
     data = []
 
     data += process_cases(data_path/'lost'/'lost', data_path/'lost'/'synthetic_found')
