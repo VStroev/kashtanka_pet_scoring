@@ -15,3 +15,9 @@ All baselines can be run and evaluated with:
 cd baselines
 bash run_baselines.sh
 ```
+
+**Before commiting scripts should be tented with**
+```
+pandas=0.25.0
+numpy=1.14.0
+```
