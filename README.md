@@ -1,13 +1,13 @@
 # Kashtanka pet scoring tools 
 
-## Score pets 
+Suppose ${DATASET} is the path to the dataset.
 
-Script for predictions evaluation.
+To run the random baseline on the dev set:
+python baselines/gen_random_baseline.py ${DATASET}/dev
 
-**Arguments**: `<predictions path> <data path> [--case_type <simple/hard>| --ad_type <lost/found>| --compressed | --parts <list of parts default: dev, dev_small, test>]`
+To evaluate the predictions on the dev set:
+python score_pets.py preds.tsv ${DATASET} dev "baseline: random predictions"
 
-## Random prediction geeration
-
-Generate file with random predictions. Useful for prediction file format understanding. 
-
-**Arguments**: `<data path> `
+All baselines can be run and evaluated with:
+cd baselines
+bash run_baselines.sh
