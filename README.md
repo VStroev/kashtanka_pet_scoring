@@ -4,7 +4,7 @@
 Tools for evaluation of search quality for data from [kashtanka pet project](https://kashtanka.pet). It includes scoring script and baselines (random and upperbound). Baselines can be useful as example of preporation of submission file. 
 
 ## Submission file format
-Submission is tsv file with following columns: 
+Submission should be tsv file with following columns: 
 * **query** - name of query folder
 * **matched_1** - expected probability that first answer is true answer
 * **matched_3** - expected probability that true answer is among top 3 answer according to score
