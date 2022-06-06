@@ -28,6 +28,16 @@ cd baselines
 bash run_baselines.sh
 ```
 
+
+## Metrics
+* **cand_recall@k:** R@k: the recall@k (0 or 1, because there is only 1 true answer for each query) averaged over 
+    queries, i.e. the proportion of queries for which the true answer is among k top candidates returned).
+    These metrics are calculated on matchable queries only.
+* **hit3pred_nonm90%_P@top0.1:** we take queries with the highest predicted hit probabilities 
+    and calculate the precision for them, i.e. the proportion of queries having the correct answer 
+    among 3 best candidates returned. The number of queries taken is 0.1*len(matchable queries).
+    nonm is the percentage of non-matchable queries.
+
 # Before commiting scripts should work with
 ```
 pandas=0.25.0
