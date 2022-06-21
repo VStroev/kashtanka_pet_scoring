@@ -8,6 +8,7 @@ from tqdm import tqdm
 from collections import defaultdict
 from pathlib import Path
 import datetime
+import cv2 
 
 SCORED_PARTS = ('dev', 'dev_small', 'test')
 
@@ -90,11 +91,12 @@ def add_hitpred_metrics(q, k, metrics):
     # print(k, prec, topn, int(non_matchable_prop*100)/100)
     metrics[f'hit{k}pred_nonm{non_matchable_pct}%_P@top{topprop}'] = prec
    
-def score_part(true_path, pred_path):    
+def score_part(true_path, pred_path, vis_dir=None):    
     df = load_preds(pred_path)
     df = merge_true_answers(df, true_path)
     write_true_ranks(df)
-    
+    if vis_dir is not None:
+        vis_preds(df, true_path.parents[0], vis_dir)
     
     metrics = defaultdict(dict)
     # Candidate ranking metrics
@@ -117,14 +119,10 @@ def score_part(true_path, pred_path):
                     
     return metrics
 
-def write_metrics(metrics, part, method_descr):
+def write_metrics(metrics, part, method_descr, outdir):
     """
     Create a new folder, save all metrics to this folder. Print the most important metrics.
     """
-    timestr = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
-    outdir = Path('score_pets_'+timestr)
-    outdir.mkdir(exist_ok=False)
-
     for k,v in metrics.items():
         sdf = pd.DataFrame(v, index=[0])
         sdf['part'] = f'{part}_{k}'
@@ -136,9 +134,64 @@ def write_metrics(metrics, part, method_descr):
         print()
     return str(outdir)
 
-def main(preds_path, data_dir, part, method_descr):
-    metrics = score_part( Path(data_dir) / part / 'registry.csv', preds_path)
-    outdir = write_metrics(metrics, part, method_descr)
+
+def rescale_to_height(img, h):
+    w = int(img.shape[1]* (h / img.shape[0]))
+    return cv2.resize(img, (w, h))
+
+def form_gallery(q, top, bot):
+    top = [rescale_to_height(x, q.shape[0]) for x in top]
+    bot = [rescale_to_height(x, q.shape[0]) for x in bot]
+    line = np.zeros((q.shape[0], 10, 3), dtype=np.uint8)
+    line[:, :, 0] = 255
+    return np.concatenate([q, line, *top, line, *bot], axis=1)
+
+def vis_row(row, queries, answers):
+    row_answers = row['answer'].split(',')
+    true_ans = row['answer_name']
+    
+    top = []
+    bot = []
+    for i in range(3):
+        
+        a = row_answers[i]
+        imgs = list(answers[a].glob('*.jpg')) + list(answers[a].glob('*.png'))
+        im = cv2.imread(str(imgs[0]))[:, :, ::-1]/255
+        if a == true_ans:
+            im = cv2.putText(im, text='+', org=(im.shape[1]//2, im.shape[0]//2), fontFace=cv2.FONT_HERSHEY_TRIPLEX, fontScale=3, color=(0, 255, 0),thickness=3)
+        top.append(im)
+        
+        a = row_answers[-i-1]
+        imgs = list(answers[a].glob('*.jpg')) + list(answers[a].glob('*.png'))
+        im = cv2.imread(str(imgs[0]))[:, :, ::-1]/255
+        bot.append(im)
+    q = queries[row['query']]
+    imgs = list(q.glob('*.jpg')) + list(q.glob('*.png'))
+    im = cv2.imread(str(imgs[0]))[:, :, ::-1]/255
+    gallery = form_gallery(im, top, bot)
+    return gallery * 255
+
+def vis_preds(pred_df, data_path, outdir):
+    # print(data_path.parents[0])
+    answers = list((data_path/'found'/'synthetic_lost').glob('*')) + list((data_path/'lost'/'synthetic_found').glob('*'))
+    queries = list((data_path/'found'/'found').glob('*')) + list((data_path/'lost'/'lost').glob('*'))
+    answers = {x.name: x for x in answers}
+    queries = {x.name: x for x in queries}
+    outdir = outdir/'vis'
+    outdir.mkdir(exist_ok=False)
+    for _, row in pred_df.iterrows():
+        print(row)
+        gallery = vis_row(row, queries, answers)
+        name = f"{row['query']}_{row['matched_3']:.3f}.jpg"
+        cv2.imwrite(str(outdir / name), gallery[:, :, ::-1])
+
+def main(preds_path, data_dir, part, method_descr, visualise=False):
+    timestr = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
+    outdir = Path('score_pets_'+timestr)
+    outdir.mkdir(exist_ok=False)
+    vis = outdir if visualise else None
+    metrics = score_part( Path(data_dir) / part / 'registry.csv', preds_path, vis)
+    outdir = write_metrics(metrics, part, method_descr, outdir)
     return outdir
     
 def score_preds(preds_path, data_dir, parts, compressed):
