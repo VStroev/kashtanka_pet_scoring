@@ -202,13 +202,14 @@ def vis_preds(pred_df, data_path, outdir):
     outdir = outdir/'vis'
     outdir.mkdir(exist_ok=False)
     types = pred_df['case_type'].unique()
-    print(pred_df.keys(), types)
-    for c_type in types:
-        type_outdir = outdir/c_type
-        type_outdir.mkdir(exist_ok=True)
-        df = pred_df[pred_df.case_type == c_type]
-        df = df.sort_values('matched_1',ascending = False).head(100)
-        vis_preds_type(df, queries, answers, type_outdir)
+    for ad_type in pred_df['type'].unique():
+        for c_type in types:
+            type_outdir = outdir/ad_type/c_type
+            type_outdir.mkdir(exist_ok=True, parents=True)
+            df = pred_df[pred_df.case_type == c_type]
+            df = df[df.type == ad_type]
+            df = df.sort_values('matched_1',ascending = False).head(100)
+            vis_preds_type(df, queries, answers, type_outdir)
 
 def main(preds_path, data_dir, part, method_descr, visualise=False):
     timestr = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
