@@ -3,7 +3,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from fire import Fire
-from sklearn.metrics import precision_recall_fscore_support
 from tqdm import tqdm
 from collections import defaultdict
 from pathlib import Path
@@ -135,42 +134,65 @@ def write_metrics(metrics, part, method_descr, outdir):
     return str(outdir)
 
 
+HEIGHT= 384
 def rescale_to_height(img, h):
     w = int(img.shape[1]* (h / img.shape[0]))
     return cv2.resize(img, (w, h))
 
-def form_gallery(q, top, bot):
-    top = [rescale_to_height(x, q.shape[0]) for x in top]
-    bot = [rescale_to_height(x, q.shape[0]) for x in bot]
-    line = np.zeros((q.shape[0], 10, 3), dtype=np.uint8)
+def form_row(imgs):
+    imgs = [rescale_to_height(x, HEIGHT) for x in imgs]
+    return np.concatenate(imgs, axis=1)
+
+def pad_len(img, max_len):
+    return np.pad(img, [(0, 0), (0, max_len - img.shape[1]), (0, 0)])
+
+def form_gallery(q, top, true_ans):
+    q_row = form_row(q)
+    top_rows = [form_row(x) for x in top]
+    if true_ans is not None:
+        true_ans_row = form_row(true_ans)
+        
+        true_ans_row_shape = true_ans_row.shape
+    else:
+        true_ans_row_shape = [0, 0]
+    max_len = max([q_row.shape[1]] + [x.shape[1] for x in top_rows] + [true_ans_row_shape[1]])
+    q_row = pad_len(q_row, max_len)
+    top_rows = [pad_len(x, max_len) for x in top_rows]
+    
+    line = np.zeros((10, max_len, 3), dtype=np.uint8)
     line[:, :, 0] = 255
-    return np.concatenate([q, line, *top, line, *bot], axis=1)
+    concat = [q_row, line, *top_rows]
+    if true_ans is not None:
+        true_ans_row = pad_len(true_ans_row, max_len)
+        concat += [line, true_ans_row]
+    return np.concatenate(concat, axis=0)
+
+def load_ad_imgs(path):
+    imgs = list(path.glob('*.jpg')) + list(path.glob('*.png'))
+    ret = []
+    for im in imgs:
+        ret.append(cv2.imread(str(im))[:, :, ::-1]/255)
+    return ret
 
 def vis_row(row, queries, answers):
     row_answers = row['answer'].split(',')
     true_ans = row['answer_name']
     
     top = []
-    bot = []
     for i in range(3):
-        
         a = row_answers[i]
-        imgs = list(answers[a].glob('*.jpg')) + list(answers[a].glob('*.png'))
-        im = cv2.imread(str(imgs[0]))[:, :, ::-1]/255
-        if a == true_ans:
-            im = cv2.putText(im, text='+', org=(im.shape[1]//2, im.shape[0]//2), fontFace=cv2.FONT_HERSHEY_TRIPLEX, fontScale=3, color=(0, 255, 0),thickness=3)
-        top.append(im)
-        
-        a = row_answers[-i-1]
-        imgs = list(answers[a].glob('*.jpg')) + list(answers[a].glob('*.png'))
-        im = cv2.imread(str(imgs[0]))[:, :, ::-1]/255
-        bot.append(im)
+        top.append(load_ad_imgs(answers[a]))
     q = queries[row['query']]
-    imgs = list(q.glob('*.jpg')) + list(q.glob('*.png'))
-    im = cv2.imread(str(imgs[0]))[:, :, ::-1]/255
-    gallery = form_gallery(im, top, bot)
+    q = load_ad_imgs(q)
+    true_ans = load_ad_imgs(answers[true_ans]) if isinstance(true_ans, str) else None
+    gallery = form_gallery(q, top, true_ans)
     return gallery * 255
 
+def vis_preds_type(pred_df, queries, answers, outdir):
+    for _, row in tqdm(pred_df.iterrows(), total=len(pred_df)):
+        gallery = vis_row(row, queries, answers)
+        name = f"{row['matched_1']:.3f}_{row['query']}.jpg"
+        cv2.imwrite(str(outdir / name), gallery[:, :, ::-1])
 def vis_preds(pred_df, data_path, outdir):
     # print(data_path.parents[0])
     answers = list((data_path/'found'/'synthetic_lost').glob('*')) + list((data_path/'lost'/'synthetic_found').glob('*'))
@@ -179,11 +201,14 @@ def vis_preds(pred_df, data_path, outdir):
     queries = {x.name: x for x in queries}
     outdir = outdir/'vis'
     outdir.mkdir(exist_ok=False)
-    for _, row in pred_df.iterrows():
-        print(row)
-        gallery = vis_row(row, queries, answers)
-        name = f"{row['query']}_{row['matched_3']:.3f}.jpg"
-        cv2.imwrite(str(outdir / name), gallery[:, :, ::-1])
+    types = pred_df['case_type'].unique()
+    print(pred_df.keys(), types)
+    for c_type in types:
+        type_outdir = outdir/c_type
+        type_outdir.mkdir(exist_ok=True)
+        df = pred_df[pred_df.case_type == c_type]
+        df = df.sort_values('matched_1',ascending = False).head(100)
+        vis_preds_type(df, queries, answers, type_outdir)
 
 def main(preds_path, data_dir, part, method_descr, visualise=False):
     timestr = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
