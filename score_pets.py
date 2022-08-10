@@ -90,9 +90,13 @@ def add_hitpred_metrics(q, k, metrics):
     # print(k, prec, topn, int(non_matchable_prop*100)/100)
     metrics[f'hit{k}pred_nonm{non_matchable_pct}%_P@top{topprop}'] = prec
    
-def score_part(true_path, pred_path, vis_dir=None):    
+def score_part(true_path, pred_path, vis_dir=None, strat_queries=None):    
     df = load_preds(pred_path)
     df = merge_true_answers(df, true_path)
+    if strat_queries is not None:
+        strat_queries = strat_queries.split(',')
+        
+        df = df[df['query'].isin(strat_queries)]
     write_true_ranks(df)
     if vis_dir is not None:
         vis_preds(df, true_path.parents[0], vis_dir)
@@ -211,13 +215,25 @@ def vis_preds(pred_df, data_path, outdir):
             df = df.sort_values('matched_1',ascending = False).head(100)
             vis_preds_type(df, queries, answers, type_outdir)
 
-def main(preds_path, data_dir, part, method_descr, visualise=False):
+def main(preds_path, data_dir, part, method_descr, visualise=False, strat_path=None):
     timestr = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
     outdir = Path('score_pets_'+timestr)
     outdir.mkdir(exist_ok=False)
     vis = outdir if visualise else None
-    metrics = score_part( Path(data_dir) / part / 'registry.csv', preds_path, vis)
-    outdir = write_metrics(metrics, part, method_descr, outdir)
+
+    if strat_path is not None:
+        strat_df = pd.read_csv(strat_path)
+        strats = [(str(x.strat), x.queries) for _, x in strat_df.iterrows()]
+    else:
+        strats = [('all', None)]
+
+    for name, strat_queries in strats:
+        print(f"Processing {name}")
+        strat_out_dir = outdir/name
+        strat_out_dir.mkdir(exist_ok=False)
+        vis = strat_out_dir if visualise else None
+        metrics = score_part( Path(data_dir) / part / 'registry.csv', preds_path, vis, strat_queries)
+        write_metrics(metrics, part, method_descr, outdir/name)
     return outdir
     
 def score_preds(preds_path, data_dir, parts, compressed):
